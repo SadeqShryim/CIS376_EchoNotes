@@ -3,6 +3,26 @@
 Hey team! Here's the rundown on what got set up so you can jump straight into building the UI without worrying about the backend stuff.
 
 ---
+## Update: Ownership Isolation Added (Pre-auth MVP) (APR 5th)
+
+We now route audio actions through FastAPI so data is scoped per browser session.
+
+What changed:
+- Frontend stores a stable session token in localStorage.
+- Frontend sends X-Session-Token with every backend API call.
+- Frontend calls POST /session/init during app startup.
+- Backend resolves token to session_id.
+- Backend upload/list/delete endpoints enforce ownership:
+  - owner_type = "session"
+  - owner_id = session_id
+- Browser/profile isolation now works for list and delete.
+
+Important notes:
+- This is temporary pre-auth ownership, not full user authentication.
+- Session/audio metadata are currently in-memory (reset on backend restart).
+- Media URLs are currently public under /media for MVP simplicity.
+
+
 
 ## What's New
 

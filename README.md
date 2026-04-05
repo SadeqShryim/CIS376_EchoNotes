@@ -81,3 +81,26 @@ One issue = one branch = one PR,
 Keep PRs small and reviewable,
 Don’t commit .venv, node_modules, or cache files,
 Make sure app runs locally before opening PR
+
+
+
+
+## Pre-auth Session Ownership (MVP)
+
+EchoNotes now uses a temporary session ownership model before full authentication.
+
+- Frontend creates a stable browser token and stores it in localStorage.
+- Frontend sends token as X-Session-Token on every API request.
+- Backend endpoint POST /session/init creates or reuses a session identity.
+- Protected routes resolve token to session_id.
+- New records are stamped with:
+  - owner_type = "session"
+  - owner_id = resolved session_id
+- Read and delete operations are filtered by owner fields.
+
+Current MVP scope:
+- Session-scoped upload, list, and delete for audio.
+
+Known MVP limitations:
+- Session and audio metadata are in-memory and reset on backend restart.
+- Media files are served via /media and are not yet protected by signed URLs.

@@ -1,423 +1,220 @@
-import { useRef, useState } from 'react'
-import { uploadAudioFile, type UploadSuccessResponse } from '../lib/uploadApi'
+/**
+ * AudioUploadTest.tsx
+ * -------------------
+ * Quick test component to verify Supabase audio upload works.
+ * Upload a file, see it appear in the list, play it, or delete it.
+ */
 
-const ALLOWED_EXTENSIONS = ['wav', 'mp3', 'm4a', 'flac']
-const ALLOWED_MIME_TYPES = [
-  'audio/wav',
-  'audio/x-wav',
-  'audio/mpeg',
-  'audio/mp3',
-  'audio/mp4',
-  'audio/x-m4a',
-  'audio/flac',
-  'audio/x-flac',
-]
-const MAX_FILE_SIZE_MB = 100
-const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+import { useEffect, useRef, useState } from 'react';
+import {
+  uploadAudio,
+  listAudioFiles,
+  getAudioUrl,
+  deleteAudio,
+} from '../lib/audioStorage';
+import type { AudioFile } from '../lib/audioStorage';
 
 export default function AudioUploadTest() {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [files, setFiles] = useState<AudioFile[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<UploadSuccessResponse | null>(null)
-  const [uploading, setUploading] = useState(false)
+  // Load existing files on mount
+  useEffect(() => {
+    fetchFiles();
+  }, []);
 
-  function getFileExtension(filename: string) {
-    const parts = filename.split('.')
-    return parts.length > 1 ? parts.pop()!.toLowerCase() : ''
-  }
-
-  function formatFileSize(bytes: number) {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-  }
-
-  function validateFile(file: File) {
-    const extension = getFileExtension(file.name)
-    const mimeType = file.type
-
-    if (!file) {
-      return 'Missing file. Please select an audio file.'
-    }
-
-    if (file.size === 0) {
-      return 'The selected file is empty.'
-    }
-
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      return `File too large. Maximum allowed size is ${MAX_FILE_SIZE_MB} MB.`
-    }
-
-    if (!ALLOWED_EXTENSIONS.includes(extension)) {
-      return 'Unsupported type. Allowed file extensions are WAV, MP3, M4A, and FLAC.'
-    }
-
-    if (mimeType && !ALLOWED_MIME_TYPES.includes(mimeType)) {
-      return 'Unsupported type. Please select a valid audio file.'
-    }
-
-    return null
-  }
-
-  function clearSelection() {
-    setSelectedFile(null)
-    setError(null)
-
-    if (inputRef.current) {
-      inputRef.current.value = ''
+  async function fetchFiles() {
+    try {
+      const data = await listAudioFiles();
+      setFiles(data);
+    } catch (err) {
+      setError(`Failed to load files: ${(err as Error).message}`);
     }
   }
 
-  function resetAll() {
-    setSelectedFile(null)
-    setError(null)
-    setSuccess(null)
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    if (inputRef.current) {
-      inputRef.current.value = ''
-    }
-  }
-
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0] || null
-
-    setError(null)
-    setSuccess(null)
-
-    if (!file) {
-      setSelectedFile(null)
-      return
-    }
-
-    const validationError = validateFile(file)
-
-    if (validationError) {
-      setSelectedFile(null)
-      setError(validationError)
-      return
-    }
-
-    setSelectedFile(file)
-  }
-
-  async function handleUpload() {
-    if (!selectedFile) {
-      setError('Missing file. Please select a valid audio file before uploading.')
-      return
-    }
-
-    setUploading(true)
-    setError(null)
-    setSuccess(null)
+    setUploading(true);
+    setError(null);
+    setSuccess(null);
 
     try {
-      const result = await uploadAudioFile(selectedFile)
-      setSuccess(result)
-      setSelectedFile(null)
-
-      if (inputRef.current) {
-        inputRef.current.value = ''
-      }
+      const uploaded = await uploadAudio(file);
+      setSuccess(`✅ Uploaded "${uploaded.filename}" successfully!`);
+      await fetchFiles(); // refresh the list
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
+      setError(`Upload failed: ${(err as Error).message}`);
     } finally {
-      setUploading(false)
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = '';
     }
   }
 
-  const uploadButtonLabel = uploading
-    ? 'Uploading...'
-    : selectedFile
-    ? 'Upload File'
-    : 'Select a File First'
+  async function handleDelete(audioFile: AudioFile) {
+    setError(null);
+    setSuccess(null);
+    try {
+      await deleteAudio(audioFile.id, audioFile.file_path);
+      setSuccess(`🗑️ Deleted "${audioFile.filename}"`);
+      await fetchFiles();
+    } catch (err) {
+      setError(`Delete failed: ${(err as Error).message}`);
+    }
+  }
+
+  function formatSize(bytes: number | null) {
+    if (!bytes) return '—';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
 
   return (
-    <section style={styles.wrapper}>
-      <div style={styles.card}>
-        <div style={styles.header}>
-          <h2 style={styles.title}>Upload Audio File</h2>
-          <p style={styles.subtitle}>
-            Supported formats: WAV, MP3, M4A, FLAC. Maximum size: {MAX_FILE_SIZE_MB} MB.
-          </p>
-          <p style={styles.helperText}>
-            This upload form is built for UC-1 and will connect to the backend upload endpoint.
-          </p>
+    <div style={styles.container}>
+      <h2 style={styles.title}>🎧 Audio Upload Test</h2>
+      <p style={styles.subtitle}>Upload an audio file to verify Supabase integration</p>
+
+      {/* Upload area */}
+      <label style={styles.uploadLabel}>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="audio/*"
+          onChange={handleUpload}
+          disabled={uploading}
+          style={styles.fileInput}
+        />
+        <div style={styles.uploadBox}>
+          {uploading ? '⏳ Uploading...' : '📁 Click to select an audio file'}
         </div>
+      </label>
 
-        <label style={styles.uploadArea}>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".wav,.mp3,.m4a,.flac,audio/*"
-            onChange={handleFileChange}
-            style={styles.hiddenInput}
-            disabled={uploading}
-          />
-          <span style={styles.uploadAreaText}>
-            {selectedFile ? 'Choose a different audio file' : 'Click here to select an audio file'}
-          </span>
-          <span style={styles.uploadAreaSubtext}>
-            Audio only, private upload flow, validated before submission.
-          </span>
-        </label>
+      {/* Status messages */}
+      {error && <div style={styles.error}>{error}</div>}
+      {success && <div style={styles.success}>{success}</div>}
 
-        {!selectedFile && !uploading && !success && (
-          <div style={styles.infoBox}>
-            No file selected yet. Choose an audio file to view details before uploading.
-          </div>
+      {/* File list */}
+      <div style={styles.fileList}>
+        <h3 style={styles.listTitle}>
+          Files in Supabase ({files.length})
+        </h3>
+        {files.length === 0 && (
+          <p style={styles.empty}>No files yet — upload one above!</p>
         )}
-
-        {selectedFile && (
-          <div style={styles.fileDetails}>
-            <div style={styles.fileDetailsHeader}>
-              <h3 style={styles.sectionTitle}>Selected File</h3>
-              <button type="button" onClick={clearSelection} style={styles.secondaryButton}>
-                Clear File
-              </button>
-            </div>
-
-            <div style={styles.detailRow}>
-              <span style={styles.detailLabel}>Name:</span>
-              <span style={styles.detailValue}>{selectedFile.name}</span>
-            </div>
-            <div style={styles.detailRow}>
-              <span style={styles.detailLabel}>Type:</span>
-              <span style={styles.detailValue}>{selectedFile.type || 'Unknown'}</span>
-            </div>
-            <div style={styles.detailRow}>
-              <span style={styles.detailLabel}>Size:</span>
-              <span style={styles.detailValue}>{formatFileSize(selectedFile.size)}</span>
-            </div>
-            <div style={styles.detailRow}>
-              <span style={styles.detailLabel}>Status:</span>
-              <span style={styles.detailValue}>Ready to upload</span>
-            </div>
-          </div>
-        )}
-
-        <div style={styles.buttonRow}>
-          <button
-            type="button"
-            onClick={handleUpload}
-            disabled={!selectedFile || uploading}
-            style={{
-              ...styles.uploadButton,
-              opacity: !selectedFile || uploading ? 0.6 : 1,
-              cursor: !selectedFile || uploading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {uploadButtonLabel}
-          </button>
-
-          <button
-            type="button"
-            onClick={resetAll}
-            disabled={uploading && !selectedFile && !success && !error}
-            style={styles.secondaryButton}
-          >
-            Reset
-          </button>
-        </div>
-
-        {error && (
-          <div style={styles.errorBox}>
-            <h3 style={styles.messageTitle}>Upload Error</h3>
-            <p style={styles.messageText}>{error}</p>
-          </div>
-        )}
-
-        {success && (
-          <div style={styles.successBox}>
-            <h3 style={styles.successTitle}>Upload Successful</h3>
-            <p style={styles.messageText}>
-              Your audio file passed validation and the frontend received a successful upload response.
-            </p>
-
-            <div style={styles.detailRow}>
-              <span style={styles.detailLabel}>File ID:</span>
-              <span style={styles.detailValue}>{success.audio_file_id}</span>
-            </div>
-            <div style={styles.detailRow}>
-              <span style={styles.detailLabel}>Filename:</span>
-              <span style={styles.detailValue}>{success.filename}</span>
-            </div>
-            <div style={styles.detailRow}>
-              <span style={styles.detailLabel}>Size:</span>
-              <span style={styles.detailValue}>{formatFileSize(success.size)}</span>
-            </div>
-            <div style={styles.detailRow}>
-              <span style={styles.detailLabel}>MIME:</span>
-              <span style={styles.detailValue}>{success.mime}</span>
-            </div>
-            <div style={styles.detailRow}>
-              <span style={styles.detailLabel}>Created At:</span>
-              <span style={styles.detailValue}>
-                {new Date(success.created_at).toLocaleString()}
+        {files.map((f) => (
+          <div key={f.id} style={styles.fileCard}>
+            <div style={styles.fileInfo}>
+              <strong>{f.filename}</strong>
+              <span style={styles.meta}>
+                {formatSize(f.file_size)} · {f.status} · {new Date(f.created_at).toLocaleString()}
               </span>
             </div>
+            <audio controls src={getAudioUrl(f.file_path)} style={styles.audio} />
+            <button onClick={() => handleDelete(f)} style={styles.deleteBtn}>
+              🗑️ Delete
+            </button>
           </div>
-        )}
+        ))}
       </div>
-    </section>
-  )
+    </div>
+  );
 }
 
+/* ---- Inline styles for quick test UI ---- */
 const styles: Record<string, React.CSSProperties> = {
-  wrapper: {
-    marginTop: '24px',
-  },
-  card: {
-    background: '#111827',
-    border: '1px solid #334155',
-    borderRadius: '20px',
-    padding: '28px',
-    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.25)',
-  },
-  header: {
-    marginBottom: '24px',
-    textAlign: 'left',
+  container: {
+    maxWidth: 600,
+    margin: '2rem auto',
+    padding: '1.5rem',
+    background: '#1a1a2e',
+    borderRadius: 12,
+    fontFamily: 'system-ui, sans-serif',
+    color: '#e0e0e0',
   },
   title: {
     margin: 0,
-    fontSize: '1.8rem',
-    color: '#f8fafc',
+    fontSize: '1.5rem',
   },
   subtitle: {
-    marginTop: '10px',
-    marginBottom: '8px',
-    color: '#cbd5e1',
-  },
-  helperText: {
-    margin: 0,
-    color: '#94a3b8',
-    fontSize: '0.95rem',
-  },
-  uploadArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    border: '2px dashed #475569',
-    borderRadius: '16px',
-    padding: '28px',
-    textAlign: 'center',
-    background: '#0f172a',
-    cursor: 'pointer',
-    marginBottom: '20px',
-  },
-  uploadAreaText: {
-    color: '#e2e8f0',
-    fontSize: '1rem',
-    fontWeight: 600,
-  },
-  uploadAreaSubtext: {
-    color: '#94a3b8',
+    margin: '0.25rem 0 1.5rem',
+    color: '#888',
     fontSize: '0.9rem',
   },
-  hiddenInput: {
+  uploadLabel: {
+    cursor: 'pointer',
+    display: 'block',
+  },
+  fileInput: {
     display: 'none',
   },
-  infoBox: {
-    background: '#172554',
-    border: '1px solid #1d4ed8',
-    color: '#bfdbfe',
-    borderRadius: '12px',
-    padding: '14px',
-    textAlign: 'left',
-    marginBottom: '20px',
-  },
-  fileDetails: {
-    background: '#0f172a',
-    border: '1px solid #334155',
-    borderRadius: '14px',
-    padding: '18px',
-    marginBottom: '20px',
-    textAlign: 'left',
-  },
-  fileDetailsHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '12px',
-    flexWrap: 'wrap',
-    marginBottom: '14px',
-  },
-  sectionTitle: {
-    margin: 0,
-    color: '#f8fafc',
-    fontSize: '1.1rem',
-  },
-  detailRow: {
-    display: 'flex',
-    gap: '10px',
-    marginBottom: '8px',
-    flexWrap: 'wrap',
-  },
-  detailLabel: {
-    fontWeight: 700,
-    color: '#a78bfa',
-    minWidth: '90px',
-  },
-  detailValue: {
-    color: '#e2e8f0',
-    wordBreak: 'break-word',
-  },
-  buttonRow: {
-    display: 'flex',
-    justifyContent: 'center',
-    gap: '12px',
-    marginBottom: '20px',
-    flexWrap: 'wrap',
-  },
-  uploadButton: {
-    background: '#8b5cf6',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '12px',
-    padding: '12px 22px',
+  uploadBox: {
+    border: '2px dashed #444',
+    borderRadius: 8,
+    padding: '2rem',
+    textAlign: 'center' as const,
     fontSize: '1rem',
-    fontWeight: 700,
+    color: '#aaa',
+    transition: 'border-color 0.2s',
   },
-  secondaryButton: {
-    background: '#1f2937',
-    color: '#e2e8f0',
-    border: '1px solid #475569',
-    borderRadius: '12px',
-    padding: '10px 18px',
-    fontSize: '0.95rem',
-    fontWeight: 600,
+  error: {
+    marginTop: '1rem',
+    padding: '0.75rem',
+    background: '#2d1b1b',
+    border: '1px solid #5c2a2a',
+    borderRadius: 8,
+    color: '#ff6b6b',
+  },
+  success: {
+    marginTop: '1rem',
+    padding: '0.75rem',
+    background: '#1b2d1b',
+    border: '1px solid #2a5c2a',
+    borderRadius: 8,
+    color: '#6bff6b',
+  },
+  fileList: {
+    marginTop: '2rem',
+  },
+  listTitle: {
+    fontSize: '1.1rem',
+    marginBottom: '0.75rem',
+  },
+  empty: {
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  fileCard: {
+    background: '#16213e',
+    borderRadius: 8,
+    padding: '1rem',
+    marginBottom: '0.75rem',
+  },
+  fileInfo: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 4,
+    marginBottom: '0.5rem',
+  },
+  meta: {
+    fontSize: '0.8rem',
+    color: '#888',
+  },
+  audio: {
+    width: '100%',
+    marginBottom: '0.5rem',
+  },
+  deleteBtn: {
+    background: '#5c2a2a',
+    color: '#ff6b6b',
+    border: 'none',
+    borderRadius: 6,
+    padding: '0.4rem 0.8rem',
     cursor: 'pointer',
+    fontSize: '0.85rem',
   },
-  errorBox: {
-    background: '#450a0a',
-    border: '1px solid #991b1b',
-    color: '#fca5a5',
-    borderRadius: '12px',
-    padding: '16px',
-    textAlign: 'left',
-  },
-  successBox: {
-    background: '#052e16',
-    border: '1px solid #166534',
-    color: '#86efac',
-    borderRadius: '12px',
-    padding: '16px',
-    textAlign: 'left',
-  },
-  successTitle: {
-    marginTop: 0,
-    marginBottom: '10px',
-    color: '#bbf7d0',
-  },
-  messageTitle: {
-    marginTop: 0,
-    marginBottom: '10px',
-    color: '#fecaca',
-  },
-  messageText: {
-    marginTop: 0,
-    marginBottom: '14px',
-    color: 'inherit',
-  },
-}
+};

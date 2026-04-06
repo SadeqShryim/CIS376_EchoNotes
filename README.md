@@ -1,4 +1,4 @@
-# CIS376-Project
+# CIS376-Project MVP stage
 Current Project Status
 
 Frontend scaffolded with React + TypeScript + Vite

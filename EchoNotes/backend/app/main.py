@@ -6,10 +6,12 @@ from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+
 app = FastAPI()
 
 _sessions: dict[str, str] = {}
 _audio_records: list[dict] = []
+_transcription_jobs: list[dict] = []    # In-memory mock database for transcription jobs.
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -27,7 +29,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -131,3 +132,107 @@ def delete_audio(audio_id: str, session_id: str = Depends(get_session_id)):
 
     _audio_records.pop(idx)
     return {"ok": True}
+
+
+@app.post("/jobs/transcribe/{audio_file_id}")
+def create_transcription_job(
+    audio_file_id: str,
+    session_id: str = Depends(get_session_id),
+):
+    # 1. Check audio exists and belongs to user
+    audio = next(
+        (
+            r for r in _audio_records
+            if r["id"] == audio_file_id
+            and r["owner_id"] == session_id
+        ),
+        None,
+    )
+
+    if not audio:
+        raise HTTPException(status_code=404, detail="Audio not found")
+
+    # 2. Create job
+    job_id = str(uuid4())
+    ts = now_iso()
+
+    job = {
+        "id": job_id,
+        "audio_file_id": audio_file_id,
+        "status": "queued",
+        "error_message": None,
+        "created_at": ts,
+        "started_at": None,
+        "completed_at": None,
+        "owner_id": session_id,
+    }
+
+    _transcription_jobs.append(job)
+
+    # 3. Return job ID immediately
+    return {"job_id": job_id}
+
+
+
+@app.get("/jobs/{job_id}/status")
+def get_job_status(job_id: str, session_id: str = Depends(get_session_id)):
+    job = next(
+        (
+            j for j in _transcription_jobs
+            if j["id"] == job_id and j["owner_id"] == session_id
+        ),
+        None,
+    )
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return job
+
+import asyncio
+
+async def transcription_worker():
+    while True:
+        for job in _transcription_jobs:
+            if job["status"] != "queued":
+                continue
+
+            try:
+                # Mark as running
+                job["status"] = "running"
+                job["started_at"] = now_iso()
+
+                # Find audio file
+                audio = next(
+                    (r for r in _audio_records if r["id"] == job["audio_file_id"]),
+                    None,
+                )
+
+                if not audio:
+                    raise Exception("Audio file not found")
+
+                # Simulate transcription delay
+                await asyncio.sleep(3)
+
+                # Fake transcript (replace later with real API)
+                transcript_text = f"Transcription of {audio['filename']}"
+
+                # Save transcript in audio record
+                audio["transcript"] = transcript_text
+                audio["status"] = "transcribed"
+                audio["updated_at"] = now_iso()
+
+                # Mark job succeeded
+                job["status"] = "succeeded"
+                job["completed_at"] = now_iso()
+
+            except Exception as e:
+                job["status"] = "failed"
+                job["error_message"] = str(e)
+                job["completed_at"] = now_iso()
+
+        await asyncio.sleep(2)  # check every 2 seconds
+
+@app.on_event("startup")
+async def start_worker():
+    asyncio.create_task(transcription_worker())

@@ -5,21 +5,11 @@
 
 ---
 
-## About the "Backend Database" Issue
+## About the "Backend Database" Issue — RESOLVED
 
-A partner reported that the backend database doesn't work. After investigation, the reason is straightforward: **there is no database connected**. All data lives in Python in-memory variables that reset every time the backend restarts.
+A partner originally reported that the backend database doesn't work. The root cause was that all data was stored in Python in-memory variables with no database connected.
 
-**Evidence:**
-
-| What | Where | Finding |
-|------|-------|---------|
-| Backend storage | `backend/app/main.py:12-14` | `_sessions: dict`, `_audio_records: list[dict]`, `_transcription_jobs: list[dict]` — all in-memory |
-| Supabase client | `frontend/src/lib/supabaseClient.ts` | File exists (37 lines) but **nothing imports it** — dead code |
-| Environment file | `frontend/.env` / `.env.local` | **Does not exist** — Supabase credentials never loaded |
-| Supabase API key | `handoff.md` line 55 | Key `sb_publishable_dCywfnhM8qnPi3x6rMdGpw_hMInS_39` — doesn't match standard Supabase JWT format (`eyJ...`). Returns "Access to schema is forbidden" when tested. |
-| DB packages | `backend/requirements.txt` | `psycopg2-binary` and `SQLAlchemy` installed but **never imported** in `main.py` |
-
-**Result:** All sessions, audio metadata, and transcription jobs are lost on every backend restart. Audio files persist on disk in `backend/uploads/` but their metadata is gone.
+**Resolution:** Backend now connects to Supabase PostgreSQL via `supabase-py`. All sessions, audio metadata, and transcription jobs persist across restarts. The frontend no longer talks to Supabase directly — all DB access goes through FastAPI (`backend/app/db.py`).
 
 ---
 
@@ -55,27 +45,18 @@ Confirmed via Playwright browser testing and API calls:
 
 ## What Doesn't Work
 
-### P1 — Critical: Database & Persistence
+### P1 — Critical: Database & Persistence ✅ DONE
 
-- [ ] **In-memory storage** — All data stored in Python dicts/lists, lost on restart
-  - File: `backend/app/main.py:12-14`
-  - Next step: Connect to Supabase PostgreSQL or local PostgreSQL via SQLAlchemy
+- [x] **In-memory storage** — Replaced with Supabase PostgreSQL via `supabase-py`
+  - File: `backend/app/db.py` (Supabase client), `backend/app/main.py` (all endpoints use DB)
 
-- [ ] **Dead Supabase client** — `supabaseClient.ts` is never imported by any file
-  - File: `frontend/src/lib/supabaseClient.ts` (entire file)
-  - Next step: Either integrate it into `audioStorage.ts` or remove it
+- [x] **Dead Supabase client** — `supabaseClient.ts` deleted (frontend no longer talks to Supabase directly)
 
-- [ ] **Missing .env file** — No `.env` or `.env.local` in frontend directory
-  - Location: `frontend/`
-  - Next step: Create `.env` with valid `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+- [x] **Missing .env file** — Created for both backend and frontend with proper credentials
 
-- [ ] **Invalid Supabase API key** — Key in `handoff.md` doesn't work
-  - File: `handoff.md` line 55
-  - Next step: Get valid anon key from Supabase dashboard (should start with `eyJ...`)
+- [x] **Invalid Supabase API key** — Resolved; backend uses service role key, frontend only knows the API base URL
 
-- [ ] **Unused DB dependencies** — psycopg2-binary and SQLAlchemy installed but never used
-  - File: `backend/requirements.txt`
-  - Next step: Either wire them up or remove if using Supabase client-side only
+- [x] **Unused DB dependencies** — Cleaned up; now using `supabase-py` instead of psycopg2/SQLAlchemy
 
 ### P2 — High: Missing Core Features
 
@@ -101,8 +82,8 @@ Confirmed via Playwright browser testing and API calls:
 
 ### P3 — Medium: UI/UX Cleanup
 
-- [ ] **Misleading "Supabase" labels** — UI says "Files in Supabase" and "verify Supabase integration" but Supabase is not used
-  - File: `frontend/src/components/AudioUploadTest.tsx:80,104`
+- [ ] **Misleading "Supabase" labels** — UI says "Files in Supabase" and "verify Supabase integration"; users shouldn't see infrastructure names
+  - File: `frontend/src/components/AudioUploadTest.tsx`
   - Next step: Change to "Your Files" or "Uploaded Files"
 
 - [ ] **Page title is "frontend"** — Should be "EchoNotes"
@@ -116,22 +97,18 @@ Confirmed via Playwright browser testing and API calls:
 - [ ] **No routing or 404 handling** — Any URL renders the same page
   - Next step: Add React Router or at minimum a 404 fallback
 
-### P4 — Low: Backend & Security Hardening
+### P4 — Low: Backend & Security Hardening ✅ DONE
 
-- [ ] **No file-type validation** — Backend accepts any file (tested: .txt file uploaded successfully)
+- [x] **File-type validation** — Backend rejects non-audio MIME types with 400
   - File: `backend/app/main.py` (upload endpoint)
-  - Next step: Validate MIME type is `audio/*` before accepting
 
-- [ ] **Public media endpoint** — `/media` serves files with no auth check
-  - File: `backend/app/main.py:20`
-  - Next step: Add session-based access control or signed URLs
+- [x] **Authenticated media endpoint** — `/media` now requires session token via `token` query param
 
-- [ ] **Hardcoded backend URL** — `http://127.0.0.1:8000` in two frontend files
-  - Files: `frontend/src/lib/audioStorage.ts:30`, `frontend/src/lib/apiClient.ts:3`
-  - Next step: Use `VITE_API_BASE` env variable or Vite proxy config
+- [x] **Configurable backend URL** — Frontend reads `VITE_API_BASE` env var, falls back to `http://127.0.0.1:8000`
+  - Files: `frontend/src/lib/audioStorage.ts`, `frontend/src/lib/apiClient.ts`
 
 - [ ] **No .env.example** — No template showing required environment variables
-  - Next step: Create `frontend/.env.example` with placeholder values
+  - Next step: Create `.env.example` files with placeholder values
 
 ---
 
@@ -139,29 +116,22 @@ Confirmed via Playwright browser testing and API calls:
 
 | File | Role | Status |
 |------|------|--------|
-| `backend/app/main.py` | All API endpoints + in-memory storage + async worker | Working but no persistence |
+| `backend/app/main.py` | All API endpoints + Supabase persistence + async worker | Working |
+| `backend/app/db.py` | Supabase client initialization | Working |
 | `frontend/src/components/AudioUploadTest.tsx` | Audio upload/list/delete UI | Working but missing transcription UI, misleading labels |
 | `frontend/src/lib/audioStorage.ts` | Backend API calls for audio CRUD | Working, `updateAudioMetadata` unimplemented |
-| `frontend/src/lib/apiClient.ts` | Fetch wrapper with session token | Working, hardcoded URL |
+| `backend/tests/conftest.py` | Test cleanup fixture | Working |
+| `frontend/src/lib/apiClient.ts` | Fetch wrapper with session token | Working, configurable URL |
 | `frontend/src/lib/sessionToken.ts` | localStorage session token | Working |
-| `frontend/src/lib/supabaseClient.ts` | Supabase client init | Dead code — nothing imports it |
 | `frontend/src/App.tsx` | Main page layout | Working but full of Vite boilerplate |
 | `frontend/index.html` | HTML entry point | Working, wrong title |
-| `handoff.md` | Supabase setup docs | Outdated — describes integration that doesn't exist |
 | `backend/tests/ownershiptests.py` | Session isolation tests | Working |
 | `backend/tests/tokenvalidationtests.py` | Token validation tests | Working |
 
 ---
 
-## Supabase SQL — Run in Dashboard > SQL Editor
+## Supabase Tables
 
-Copy and paste the entire block below into **Supabase Dashboard > SQL Editor > New Query** and click **Run**.
-
-```sql
-
-
-```
-
-After running, verify in the **Table Editor** that:
-- `audio_files` has new columns: `owner_type`, `owner_id`
-- `transcription_jobs` table exists with 8 columns
+Tables are already set up in Supabase PostgreSQL:
+- `audio_files` — stores audio metadata with `owner_type` and `owner_id` columns
+- `transcription_jobs` — tracks transcription job status and results

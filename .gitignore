@@ -5,6 +5,9 @@ CLAUDE.md
 # Playwright MCP
 .playwright-mcp/
 
+# Team notes
+seraj.md
+
 # Test artifacts
 *.wav
 *.png

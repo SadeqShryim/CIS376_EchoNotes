@@ -3,7 +3,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.db import supabase
-from app.dependencies import _sessions, get_session_id
+from app.dependencies import get_current_user
 from app.storage import delete_file, get_signed_url, upload_file
 
 ALLOWED_MIME_PREFIXES = ("audio/",)
@@ -17,7 +17,7 @@ router = APIRouter()
 @router.post("/audio/upload")
 async def upload_audio(
     file: UploadFile = File(...),
-    session_id: str = Depends(get_session_id),
+    user_id: str = Depends(get_current_user),
 ):
     if not file.filename:
         raise HTTPException(status_code=400, detail="File name is required")
@@ -40,8 +40,8 @@ async def upload_audio(
         "file_path": storage_name,
         "file_size": len(contents),
         "mime_type": mime or "application/octet-stream",
-        "owner_type": "session",
-        "owner_id": session_id,
+        "owner_type": "user",
+        "owner_id": user_id,
     }
 
     result = supabase.table("audio_files").insert(row).execute()
@@ -53,15 +53,17 @@ def serve_media(file_path: str, token: str | None = None):
     """Serve audio via signed URL (Supabase Storage)."""
     if not token:
         raise HTTPException(status_code=400, detail="Missing token query parameter")
-    session_id = _sessions.get(token)
-    if not session_id:
-        raise HTTPException(status_code=401, detail="Invalid session token")
+    try:
+        auth_result = supabase.auth.get_user(token)
+        user_id = str(auth_result.user.id)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     result = (
         supabase.table("audio_files")
         .select("id")
         .eq("file_path", file_path)
-        .eq("owner_id", session_id)
+        .eq("owner_id", user_id)
         .execute()
     )
 
@@ -73,12 +75,12 @@ def serve_media(file_path: str, token: str | None = None):
 
 
 @router.get("/audio")
-def list_audio(session_id: str = Depends(get_session_id)):
+def list_audio(user_id: str = Depends(get_current_user)):
     result = (
         supabase.table("audio_files")
         .select("*")
-        .eq("owner_type", "session")
-        .eq("owner_id", session_id)
+        .eq("owner_type", "user")
+        .eq("owner_id", user_id)
         .order("created_at", desc=True)
         .execute()
     )
@@ -86,13 +88,13 @@ def list_audio(session_id: str = Depends(get_session_id)):
 
 
 @router.delete("/audio/{audio_id}")
-def delete_audio(audio_id: str, session_id: str = Depends(get_session_id)):
+def delete_audio(audio_id: str, user_id: str = Depends(get_current_user)):
     result = (
         supabase.table("audio_files")
         .select("id, file_path")
         .eq("id", audio_id)
-        .eq("owner_type", "session")
-        .eq("owner_id", session_id)
+        .eq("owner_type", "user")
+        .eq("owner_id", user_id)
         .execute()
     )
 

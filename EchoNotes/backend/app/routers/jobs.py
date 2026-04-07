@@ -3,7 +3,7 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.db import supabase
-from app.dependencies import get_session_id, now_iso
+from app.dependencies import get_current_user, now_iso
 
 router = APIRouter()
 
@@ -11,13 +11,13 @@ router = APIRouter()
 @router.post("/jobs/transcribe/{audio_file_id}")
 def create_transcription_job(
     audio_file_id: str,
-    session_id: str = Depends(get_session_id),
+    user_id: str = Depends(get_current_user),
 ):
     audio_result = (
         supabase.table("audio_files")
         .select("id")
         .eq("id", audio_file_id)
-        .eq("owner_id", session_id)
+        .eq("owner_id", user_id)
         .execute()
     )
 
@@ -27,19 +27,19 @@ def create_transcription_job(
     job_row = {
         "audio_file_id": audio_file_id,
         "status": "queued",
-        "owner_id": session_id,
+        "owner_id": user_id,
     }
     result = supabase.table("transcription_jobs").insert(job_row).execute()
     return {"job_id": result.data[0]["id"]}
 
 
 @router.get("/jobs/{job_id}/status")
-def get_job_status(job_id: str, session_id: str = Depends(get_session_id)):
+def get_job_status(job_id: str, user_id: str = Depends(get_current_user)):
     result = (
         supabase.table("transcription_jobs")
         .select("*")
         .eq("id", job_id)
-        .eq("owner_id", session_id)
+        .eq("owner_id", user_id)
         .execute()
     )
 

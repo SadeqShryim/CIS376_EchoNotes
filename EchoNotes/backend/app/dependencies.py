@@ -2,22 +2,26 @@ from datetime import datetime, timezone
 
 from fastapi import Header, HTTPException
 
-
-# In-memory pre-auth MVP (replaced by real auth in feat/supabase-auth)
-_sessions: dict[str, str] = {}
+from app.db import supabase
 
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def get_session_id(x_session_token: str | None = Header(default=None)) -> str:
-    if not x_session_token:
-        raise HTTPException(status_code=400, detail="Missing X-Session-Token header")
-    session_id = _sessions.get(x_session_token)
-    if not session_id:
+def get_current_user(authorization: str | None = Header(default=None)) -> str:
+    if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=401,
-            detail="Invalid or unknown session token. Call POST /session/init first.",
+            detail="Missing or invalid Authorization header",
         )
-    return session_id
+    token = authorization.removeprefix("Bearer ")
+    try:
+        result = supabase.auth.get_user(token)
+        if result.user is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return str(result.user.id)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")

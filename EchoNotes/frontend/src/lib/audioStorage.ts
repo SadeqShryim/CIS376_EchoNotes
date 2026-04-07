@@ -1,4 +1,5 @@
 import { apiFetch } from './apiClient';
+import { getOrCreateSessionToken } from './sessionToken';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,7 +28,7 @@ export interface AudioFileUpdate {
   status?: string;
 }
 
-const BACKEND_BASE = 'http://127.0.0.1:8000';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000';
 
 // ---------------------------------------------------------------------------
 // Public API (backend-driven)
@@ -51,7 +52,7 @@ export async function listAudioFiles(): Promise<AudioFile[]> {
 }
 
 export function getAudioUrl(filePath: string): string {
-  return `${BACKEND_BASE}/media/${encodeURIComponent(filePath)}`;
+  return `${API_BASE}/media/${encodeURIComponent(filePath)}?token=${encodeURIComponent(getOrCreateSessionToken())}`;
 }
 
 export async function deleteAudio(id: string, _filePath: string): Promise<void> {

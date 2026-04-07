@@ -1,106 +1,130 @@
-# CIS376-Project MVP stage
-Current Project Status
+# EchoNotes
 
-Frontend scaffolded with React + TypeScript + Vite
+Audio note-taking app with upload, transcription, and summarization. Built with React + FastAPI + Supabase.
 
-Backend scaffolded with FastAPI
+## Tech Stack
 
-Health check route implemented: GET /health
+- **Frontend:** React 19, TypeScript, Vite
+- **Backend:** Python, FastAPI, Uvicorn
+- **Database:** Supabase (PostgreSQL)
+- **Storage:** Local disk (`backend/uploads/`) with session-authenticated access
 
-Tech Stack
-Frontend: React, TypeScript, Vite
+## Current Status (MVP)
 
-Backend: Python, FastAPI, Uvicorn
+- Audio upload, list, playback, and delete
+- Session-based ownership isolation (pre-auth)
+- Transcription job pipeline (simulated — real speech-to-text coming)
+- Data persisted to Supabase PostgreSQL
+- File-type validation (audio only)
+- Authenticated media endpoint
 
-Planned: PostgreSQL, Redis, Celery (for async transcription jobs)
+## Setup
 
+### 1. Clone
 
-
-1. Clone and Open
-
+```bash
 git clone <repo-url>
+cd CIS376_EchoNotes
+```
 
-cd CIS376-TermProject/EchoNotes
+### 2. Backend
 
-
-
-3. Frontend Setup
-   
-cd frontend
-
-npm install
-
-npm run dev
-
-Frontend runs on: http://localhost:5173
-
-
-3. Backend Setup
-
-   
-Open a second terminal:
-
+**Mac / Linux:**
+```bash
 cd EchoNotes/backend
-
-
 python3 -m venv .venv
-
-
 source .venv/bin/activate
-
-
 pip install -r requirements.txt
+```
 
+**Windows (PowerShell):**
+```powershell
+cd EchoNotes\backend
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
-python -m uvicorn app.main:app --reload --port 8000
+**Windows (Git Bash):**
+```bash
+cd EchoNotes/backend
+python -m venv .venv
+source .venv/Scripts/activate
+pip install -r requirements.txt
+```
 
+Create `EchoNotes/backend/.env`:
+```
+SUPABASE_URL=<your-supabase-project-url>
+SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+```
 
-Backend runs on: http://127.0.0.1:8000
+Start the server:
+```bash
+uvicorn app.main:app --reload --port 8000
+```
 
-Swagger docs: http://127.0.0.1:8000/docs
+Backend runs on `http://127.0.0.1:8000` — Swagger docs at `/docs`.
 
-Health route: http://127.0.0.1:8000/health
+### 3. Frontend
 
+```bash
+cd EchoNotes/frontend
+npm install
+```
 
+Create `EchoNotes/frontend/.env`:
+```
+VITE_SUPABASE_URL=<your-supabase-project-url>
+VITE_SUPABASE_ANON_KEY=<your-supabase-anon-key>
+VITE_API_BASE=http://127.0.0.1:8000
+```
 
-4. Daily Workflow (Brief)
-Pull latest main before starting:
+Start the dev server:
+```bash
+npm run dev
+```
 
-git checkout main
+Frontend runs on `http://localhost:5173`.
 
-git pull
+## API Endpoints
 
-Create a branch for your issue:
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
+| POST | `/session/init` | Create or reuse session |
+| GET | `/session/me` | Get current session ID |
+| POST | `/audio/upload` | Upload audio file (audio MIME types only) |
+| GET | `/audio` | List session-scoped audio files |
+| DELETE | `/audio/{id}` | Delete audio file (ownership enforced) |
+| GET | `/media/{file_path}` | Stream audio file (session-authenticated) |
+| POST | `/jobs/transcribe/{audio_file_id}` | Create transcription job |
+| GET | `/jobs/{job_id}/status` | Poll transcription job status |
 
-git checkout -b feat/<issue-number>-short-title
-
-
-
-5. Team Rules (Short)
-One issue = one branch = one PR,
-Keep PRs small and reviewable,
-Don’t commit .venv, node_modules, or cache files,
-Make sure app runs locally before opening PR
-
-
-
+All protected endpoints require an `X-Session-Token` header. The `/media` endpoint accepts a `token` query parameter (for `<audio>` element compatibility).
 
 ## Pre-auth Session Ownership (MVP)
 
-EchoNotes now uses a temporary session ownership model before full authentication.
+- Frontend creates a stable browser token stored in localStorage
+- Token sent as `X-Session-Token` on every API request
+- Backend resolves token to a session ID
+- All records stamped with `owner_type` / `owner_id`
+- Read, delete, and media access filtered by ownership
 
-- Frontend creates a stable browser token and stores it in localStorage.
-- Frontend sends token as X-Session-Token on every API request.
-- Backend endpoint POST /session/init creates or reuses a session identity.
-- Protected routes resolve token to session_id.
-- New records are stamped with:
-  - owner_type = "session"
-  - owner_id = resolved session_id
-- Read and delete operations are filtered by owner fields.
+**Known MVP limitations:**
+- Sessions are in-memory (reset on backend restart, but audio data persists in Supabase)
+- Transcription produces simulated output (real speech-to-text not yet integrated)
 
-Current MVP scope:
-- Session-scoped upload, list, and delete for audio.
+## Branching & PR Rules
 
-Known MVP limitations:
-- Session and audio metadata are in-memory and reset on backend restart.
-- Media files are served via /media and are not yet protected by signed URLs.
+- One issue = one branch = one PR
+- Branch naming: `feat/<issue-number>-short-title`
+- Keep PRs small and reviewable
+- Ensure app runs locally before opening a PR
+- Never commit `.venv`, `node_modules`, `.env`, or cache files
+
+## Testing
+
+- Backend tests: `cd EchoNotes/backend && python -m pytest tests/ -v`
+- Frontend lint: `cd EchoNotes/frontend && npm run lint`
+- Frontend build check: `cd EchoNotes/frontend && npm run build`

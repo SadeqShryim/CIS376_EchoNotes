@@ -1,23 +1,26 @@
-from datetime import datetime, timezone
+from dotenv import load_dotenv
+load_dotenv()
+
+import asyncio
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
+from app.db import supabase
 
 app = FastAPI()
 
-_sessions: dict[str, str] = {}
-_audio_records: list[dict] = []
-_transcription_jobs: list[dict] = []    # In-memory mock database for transcription jobs.
+_sessions: dict[str, str] = {}  # In-memory pre-auth MVP (replaced by real auth later)
+
+ALLOWED_MIME_PREFIXES = ("audio/",)
+ALLOWED_MIME_FALLBACK = "application/octet-stream"  # Some browsers send this for audio
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-app.mount("/media", StaticFiles(directory=str(UPLOAD_DIR)), name="media")
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,7 +33,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 def now_iso() -> str:
+    from datetime import datetime, timezone
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -75,62 +80,93 @@ async def upload_audio(
     if not file.filename:
         raise HTTPException(status_code=400, detail="File name is required")
 
+    mime = file.content_type or ""
+    if not mime.startswith(ALLOWED_MIME_PREFIXES) and mime != ALLOWED_MIME_FALLBACK:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only audio files are allowed. Got: {mime}",
+        )
+
     storage_name = f"{uuid4()}_{Path(file.filename).name}"
     file_path = UPLOAD_DIR / storage_name
 
     contents = await file.read()
     file_path.write_bytes(contents)
 
-    ts = now_iso()
-    record = {
-        "id": str(uuid4()),
+    row = {
         "filename": file.filename,
         "file_path": storage_name,
         "file_size": len(contents),
-        "mime_type": file.content_type or "application/octet-stream",
-        "duration_seconds": None,
-        "transcript": None,
-        "summary": None,
-        "status": "uploaded",
-        "created_at": ts,
-        "updated_at": ts,
+        "mime_type": mime or "application/octet-stream",
         "owner_type": "session",
         "owner_id": session_id,
     }
-    _audio_records.append(record)
-    return record
+
+    result = supabase.table("audio_files").insert(row).execute()
+    return result.data[0]
+
+
+@app.get("/media/{file_path:path}")
+def serve_media(file_path: str, token: str | None = None):
+    """Serve audio files with session auth via query param (audio elements can't send headers)."""
+    if not token:
+        raise HTTPException(status_code=400, detail="Missing token query parameter")
+    session_id = _sessions.get(token)
+    if not session_id:
+        raise HTTPException(status_code=401, detail="Invalid session token")
+
+    result = (
+        supabase.table("audio_files")
+        .select("id")
+        .eq("file_path", file_path)
+        .eq("owner_id", session_id)
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    disk_file = UPLOAD_DIR / file_path
+    if not disk_file.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    return FileResponse(disk_file)
 
 
 @app.get("/audio")
 def list_audio(session_id: str = Depends(get_session_id)):
-    rows = [
-        r for r in _audio_records
-        if r["owner_type"] == "session" and r["owner_id"] == session_id
-    ]
-    rows.sort(key=lambda r: r["created_at"], reverse=True)
-    return rows
+    result = (
+        supabase.table("audio_files")
+        .select("*")
+        .eq("owner_type", "session")
+        .eq("owner_id", session_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return result.data
 
 
 @app.delete("/audio/{audio_id}")
 def delete_audio(audio_id: str, session_id: str = Depends(get_session_id)):
-    idx = next(
-        (
-            i for i, r in enumerate(_audio_records)
-            if r["id"] == audio_id
-            and r["owner_type"] == "session"
-            and r["owner_id"] == session_id
-        ),
-        None,
+    result = (
+        supabase.table("audio_files")
+        .select("id, file_path")
+        .eq("id", audio_id)
+        .eq("owner_type", "session")
+        .eq("owner_id", session_id)
+        .execute()
     )
-    if idx is None:
+
+    if not result.data:
         raise HTTPException(status_code=404, detail="Audio not found")
 
-    record = _audio_records[idx]
+    record = result.data[0]
+
     disk_file = UPLOAD_DIR / record["file_path"]
     if disk_file.exists():
         disk_file.unlink()
 
-    _audio_records.pop(idx)
+    supabase.table("audio_files").delete().eq("id", audio_id).execute()
     return {"ok": True}
 
 
@@ -139,99 +175,94 @@ def create_transcription_job(
     audio_file_id: str,
     session_id: str = Depends(get_session_id),
 ):
-    # 1. Check audio exists and belongs to user
-    audio = next(
-        (
-            r for r in _audio_records
-            if r["id"] == audio_file_id
-            and r["owner_id"] == session_id
-        ),
-        None,
+    audio_result = (
+        supabase.table("audio_files")
+        .select("id")
+        .eq("id", audio_file_id)
+        .eq("owner_id", session_id)
+        .execute()
     )
 
-    if not audio:
+    if not audio_result.data:
         raise HTTPException(status_code=404, detail="Audio not found")
 
-    # 2. Create job
-    job_id = str(uuid4())
-    ts = now_iso()
-
-    job = {
-        "id": job_id,
+    job_row = {
         "audio_file_id": audio_file_id,
         "status": "queued",
-        "error_message": None,
-        "created_at": ts,
-        "started_at": None,
-        "completed_at": None,
         "owner_id": session_id,
     }
-
-    _transcription_jobs.append(job)
-
-    # 3. Return job ID immediately
-    return {"job_id": job_id}
-
+    result = supabase.table("transcription_jobs").insert(job_row).execute()
+    return {"job_id": result.data[0]["id"]}
 
 
 @app.get("/jobs/{job_id}/status")
 def get_job_status(job_id: str, session_id: str = Depends(get_session_id)):
-    job = next(
-        (
-            j for j in _transcription_jobs
-            if j["id"] == job_id and j["owner_id"] == session_id
-        ),
-        None,
+    result = (
+        supabase.table("transcription_jobs")
+        .select("*")
+        .eq("id", job_id)
+        .eq("owner_id", session_id)
+        .execute()
     )
 
-    if not job:
+    if not result.data:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    return job
+    return result.data[0]
 
-import asyncio
 
 async def transcription_worker():
     while True:
-        for job in _transcription_jobs:
-            if job["status"] != "queued":
-                continue
+        result = (
+            supabase.table("transcription_jobs")
+            .select("*")
+            .eq("status", "queued")
+            .execute()
+        )
 
+        for job in result.data:
             try:
-                # Mark as running
-                job["status"] = "running"
-                job["started_at"] = now_iso()
+                supabase.table("transcription_jobs").update({
+                    "status": "running",
+                    "started_at": now_iso(),
+                }).eq("id", job["id"]).execute()
 
-                # Find audio file
-                audio = next(
-                    (r for r in _audio_records if r["id"] == job["audio_file_id"]),
-                    None,
+                audio_result = (
+                    supabase.table("audio_files")
+                    .select("*")
+                    .eq("id", job["audio_file_id"])
+                    .execute()
                 )
 
-                if not audio:
+                if not audio_result.data:
                     raise Exception("Audio file not found")
 
-                # Simulate transcription delay
+                audio = audio_result.data[0]
+
                 await asyncio.sleep(3)
 
-                # Fake transcript (replace later with real API)
                 transcript_text = f"Transcription of {audio['filename']}"
 
-                # Save transcript in audio record
-                audio["transcript"] = transcript_text
-                audio["status"] = "transcribed"
-                audio["updated_at"] = now_iso()
+                supabase.table("audio_files").update({
+                    "transcript": transcript_text,
+                    "status": "transcribed",
+                    "updated_at": now_iso(),
+                }).eq("id", job["audio_file_id"]).execute()
 
-                # Mark job succeeded
-                job["status"] = "succeeded"
-                job["completed_at"] = now_iso()
+                supabase.table("transcription_jobs").update({
+                    "status": "succeeded",
+                    "completed_at": now_iso(),
+                }).eq("id", job["id"]).execute()
 
             except Exception as e:
-                job["status"] = "failed"
-                job["error_message"] = str(e)
-                job["completed_at"] = now_iso()
+                supabase.table("transcription_jobs").update({
+                    "status": "failed",
+                    "error_message": str(e),
+                    "completed_at": now_iso(),
+                }).eq("id", job["id"]).execute()
 
-        await asyncio.sleep(2)  # check every 2 seconds
+        await asyncio.sleep(2)
+
 
 @app.on_event("startup")
 async def start_worker():

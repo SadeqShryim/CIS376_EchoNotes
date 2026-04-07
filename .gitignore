@@ -1,0 +1,11 @@
+# Claude Code
+CLAUDE.md
+.claude/
+
+# Playwright MCP
+.playwright-mcp/
+
+# Test artifacts
+*.wav
+*.png
+reject_test.txt

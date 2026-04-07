@@ -3,5 +3,6 @@ uvicorn[standard]
 python-dotenv
 python-multipart
 supabase>=2.0.0,<2.13.0
+assemblyai
 pytest
 httpx

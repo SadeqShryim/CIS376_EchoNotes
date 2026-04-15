@@ -1,67 +1,70 @@
-import { apiFetch } from './apiClient';
-import { getOrCreateSessionToken } from './sessionToken';
+import { apiFetch, API_BASE } from './apiClient';
+import { getToken } from './authClient';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-/** Mirrors the audio record returned by backend. */
 export interface AudioFile {
   id: string;
   filename: string;
   file_path: string;
   file_size: number | null;
   mime_type: string | null;
-  duration_seconds: number | null;
   transcript: string | null;
   summary: string | null;
-  /** Status flow: uploaded -> transcribing -> transcribed -> summarizing -> completed */
   status: string;
   created_at: string;
   updated_at: string;
 }
 
-/** Fields that can be patched later when metadata endpoint is added. */
-export interface AudioFileUpdate {
-  transcript?: string;
-  summary?: string;
-  status?: string;
-}
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000';
-
-// ---------------------------------------------------------------------------
-// Public API (backend-driven)
-// ---------------------------------------------------------------------------
-
 export async function uploadAudio(file: File): Promise<AudioFile> {
   const form = new FormData();
   form.append('file', file);
-
-  const res = await apiFetch('/audio/upload', {
-    method: 'POST',
-    body: form,
-  });
-
+  const res = await apiFetch('/audio/upload', { method: 'POST', body: form });
   return (await res.json()) as AudioFile;
 }
 
 export async function listAudioFiles(): Promise<AudioFile[]> {
-  const res = await apiFetch('/audio', { method: 'GET' });
+  const res = await apiFetch('/audio');
   return (await res.json()) as AudioFile[];
 }
 
-export function getAudioUrl(filePath: string): string {
-  return `${API_BASE}/media/${encodeURIComponent(filePath)}?token=${encodeURIComponent(getOrCreateSessionToken())}`;
+export async function getAudioFile(id: string): Promise<AudioFile> {
+  const files = await listAudioFiles();
+  const file = files.find((f) => f.id === id);
+  if (!file) throw new Error('Audio file not found');
+  return file;
 }
 
-export async function deleteAudio(id: string, _filePath: string): Promise<void> {
+export function getAudioUrl(filePath: string): string {
+  const token = getToken() || '';
+  return `${API_BASE}/media/${encodeURIComponent(filePath)}?token=${encodeURIComponent(token)}`;
+}
+
+export async function deleteAudio(id: string): Promise<void> {
   await apiFetch(`/audio/${id}`, { method: 'DELETE' });
 }
 
-export async function updateAudioMetadata(
-  _id: string,
-  _updates: AudioFileUpdate,
-): Promise<AudioFile> {
-  throw new Error('updateAudioMetadata is not implemented in backend MVP yet');
+export async function transcribeAudio(audioFileId: string): Promise<string> {
+  const res = await apiFetch(`/jobs/transcribe/${audioFileId}`, { method: 'POST' });
+  const data = await res.json();
+  return data.job_id;
+}
+
+export async function getJobStatus(jobId: string) {
+  const res = await apiFetch(`/jobs/${jobId}/status`);
+  return res.json();
+}
+
+export async function summarizeAudio(audioFileId: string): Promise<string> {
+  const res = await apiFetch(`/audio/${audioFileId}/summarize`, { method: 'POST' });
+  const data = await res.json();
+  return data.summary;
+}
+
+export async function getSummary(audioFileId: string): Promise<string | null> {
+  try {
+    const res = await apiFetch(`/audio/${audioFileId}/summary`);
+    const data = await res.json();
+    return data.summary;
+  } catch {
+    return null;
+  }
 }

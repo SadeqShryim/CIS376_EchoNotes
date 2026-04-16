@@ -10,11 +10,12 @@ const ALLOWED_MIME = new Set([
   'audio/wave',
   'audio/x-wav',
   'audio/mp4',
+  'video/mp4',
   'audio/x-m4a',
   'audio/webm',
   'audio/ogg',
 ]);
-const ALLOWED_EXT = ['.mp3', '.wav', '.m4a', '.webm', '.ogg'];
+const ALLOWED_EXT = ['.mp3', '.wav', '.m4a', '.mp4', '.webm', '.ogg'];
 
 function isAudioFile(file: File): boolean {
   if (file.type && ALLOWED_MIME.has(file.type)) return true;
@@ -41,7 +42,7 @@ export default function UploadPage() {
 
   const selectFile = (f: File) => {
     if (!isAudioFile(f)) {
-      setError('Unsupported file type. Use .mp3, .wav, .m4a, .webm, or .ogg.');
+      setError('Unsupported file type. Use .mp3, .wav, .m4a, .mp4, .webm, or .ogg.');
       setFile(null);
       return;
     }
@@ -169,12 +170,12 @@ export default function UploadPage() {
             {file ? file.name : 'Drop your audio file here'}
           </p>
           <p className="upload-dropzone-sub">
-            {file ? formatSize(file.size) : '.mp3 · .wav · .m4a · .webm · .ogg'}
+            {file ? formatSize(file.size) : '.mp3 · .wav · .m4a · .mp4 · .webm · .ogg'}
           </p>
           <input
             ref={inputRef}
             type="file"
-            accept="audio/*,.mp3,.wav,.m4a,.webm,.ogg"
+            accept="audio/*,video/mp4,.mp3,.wav,.m4a,.mp4,.webm,.ogg"
             onChange={handleFileInput}
             disabled={uploading}
             hidden

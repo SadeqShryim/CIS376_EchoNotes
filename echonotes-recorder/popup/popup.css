@@ -1,0 +1,203 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 280px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background:
+    radial-gradient(circle at 20% -10%, rgba(239, 68, 68, 0.18), transparent 55%),
+    radial-gradient(circle at 120% 120%, rgba(239, 68, 68, 0.10), transparent 60%),
+    #0a0a0c;
+  color: #f3f4f6;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  padding: 18px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pop-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow:
+    0 0 0 2px rgba(239, 68, 68, 0.15),
+    0 0 14px rgba(239, 68, 68, 0.55);
+}
+
+h1 {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #f9fafb;
+}
+
+.brand-suffix {
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+}
+[hidden] { display: none !important; }
+
+button {
+  font: inherit;
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 180ms ease, box-shadow 180ms ease, transform 120ms ease, opacity 120ms ease;
+}
+button:active { transform: translateY(1px); }
+
+button.primary {
+  background: #ef4444;
+  color: #fff;
+  font-weight: 600;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 22px rgba(239, 68, 68, 0.3);
+}
+button.primary:hover {
+  background: #dc2626;
+  box-shadow: 0 0 28px rgba(239, 68, 68, 0.45);
+}
+button.primary:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+button.danger {
+  background: transparent;
+  color: #fecaca;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+button.danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+button.secondary {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e5e7eb;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+button.secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.hint {
+  font-size: 12px;
+  color: #9ca3af;
+  line-height: 1.45;
+}
+.hint.small { font-size: 11px; }
+
+.error {
+  font-size: 11px;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  padding: 8px 10px;
+  border-radius: 8px;
+  line-height: 1.4;
+}
+
+.rec-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ef4444;
+}
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: pulse 1.6s ease-out infinite;
+}
+.pulse-dot.paused {
+  background: #f59e0b;
+  animation: none;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+  70%  { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.tab-title {
+  font-size: 11px;
+  color: #9ca3af;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tab-title span {
+  color: #d1d5db;
+}
+
+.timer {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 30px;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 0.04em;
+  color: #f9fafb;
+  padding: 6px 0;
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+}
+.btn-row > button { flex: 1; }
+
+.saved-text {
+  text-align: center;
+  color: #86efac;
+  font-weight: 600;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.pop-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.pop-footer a {
+  font-size: 11px;
+  color: #9ca3af;
+  text-decoration: none;
+}
+.pop-footer a:hover {
+  color: #f3f4f6;
+}

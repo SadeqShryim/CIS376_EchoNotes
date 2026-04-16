@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import * as auth from './authClient';
+import { supabase } from './supabaseClient';
 
 interface AuthState {
   user: { user_id: string } | null;
@@ -11,6 +12,19 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+function pushRealtimeToken() {
+  if (!supabase) return;
+  const token = auth.getToken();
+  if (token) supabase.realtime.setAuth(token);
+}
+
+function clearRealtimeToken() {
+  if (!supabase) return;
+  supabase.removeAllChannels();
+  // setAuth accepts the anon key or an empty string to drop auth claims.
+  supabase.realtime.setAuth('');
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<{ user_id: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -19,22 +33,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     auth.getMe().then((data) => {
       setUser(data);
       setLoading(false);
+      if (data) pushRealtimeToken();
     });
   }, []);
 
   const signIn = async (email: string, password: string) => {
     const data = await auth.login(email, password);
     setUser({ user_id: data.user_id });
+    pushRealtimeToken();
   };
 
   const signUp = async (email: string, password: string) => {
     const data = await auth.signup(email, password);
     setUser({ user_id: data.user_id });
+    pushRealtimeToken();
   };
 
   const signOut = async () => {
     await auth.logout();
     setUser(null);
+    clearRealtimeToken();
   };
 
   return (

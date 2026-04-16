@@ -16,7 +16,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signIn(email, password);
-      navigate('/dashboard');
+      navigate('/recordings');
     } catch {
       setError('Invalid email or password');
     } finally {

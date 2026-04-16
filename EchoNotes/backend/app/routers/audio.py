@@ -1,3 +1,4 @@
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -6,8 +7,19 @@ from app.db import supabase
 from app.dependencies import get_current_user
 from app.storage import delete_file, get_signed_url, upload_file
 
+# Accept anything that is clearly audio, plus the common container MIMEs that
+# Chrome / browsers report when recording audio-only tracks (tab capture with
+# MediaRecorder emits `video/webm` even when the file has no video track), and
+# fall back to a filename-extension check so the extension can upload even when
+# the `content_type` header is missing or generic.
 ALLOWED_MIME_PREFIXES = ("audio/",)
-ALLOWED_MIME_FALLBACK = "application/octet-stream"
+ALLOWED_MIME_EXACT = {
+    "video/webm",
+    "video/mp4",
+    "application/octet-stream",
+    "application/x-matroska",
+}
+ALLOWED_EXTS = {".mp3", ".wav", ".m4a", ".mp4", ".webm", ".ogg", ".oga", ".flac", ".aac"}
 
 BUCKET = "audio-uploads"
 
@@ -22,24 +34,41 @@ async def upload_audio(
     if not file.filename:
         raise HTTPException(status_code=400, detail="File name is required")
 
-    mime = file.content_type or ""
-    if not mime.startswith(ALLOWED_MIME_PREFIXES) and mime != ALLOWED_MIME_FALLBACK:
+    mime = (file.content_type or "").lower()
+    ext = Path(file.filename).suffix.lower()
+    accepted = (
+        mime.startswith(ALLOWED_MIME_PREFIXES)
+        or mime in ALLOWED_MIME_EXACT
+        or ext in ALLOWED_EXTS
+    )
+    if not accepted:
         raise HTTPException(
             status_code=400,
-            detail=f"Only audio files are allowed. Got: {mime}",
+            detail=f"Unsupported file type: mime={mime or 'unknown'!r}, extension={ext or 'none'!r}",
         )
 
-    from pathlib import Path
+    # Normalise webm/mp4 containers that carry only audio to an audio/* MIME so
+    # browsers will happily feed the resulting signed URL straight into an
+    # <audio> element. The file on disk is unchanged; only the Content-Type
+    # stored on the Supabase object and the audio_files.mime_type row change.
+    normalised_mime = mime
+    if mime in {"video/webm", "application/x-matroska"} or ext == ".webm":
+        normalised_mime = "audio/webm"
+    elif mime == "video/mp4" and ext in {".m4a", ".mp4"}:
+        normalised_mime = "audio/mp4"
+    elif not mime:
+        normalised_mime = "application/octet-stream"
+
     storage_name = f"{uuid4()}_{Path(file.filename).name}"
     contents = await file.read()
 
-    upload_file(BUCKET, storage_name, contents, mime or "application/octet-stream")
+    upload_file(BUCKET, storage_name, contents, normalised_mime)
 
     row = {
         "filename": file.filename,
         "file_path": storage_name,
         "file_size": len(contents),
-        "mime_type": mime or "application/octet-stream",
+        "mime_type": normalised_mime,
         "owner_type": "user",
         "owner_id": user_id,
     }

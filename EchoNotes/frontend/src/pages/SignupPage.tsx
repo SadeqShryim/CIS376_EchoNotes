@@ -16,13 +16,22 @@ export default function SignupPage() {
     setLoading(true);
     try {
       await signUp(email, password);
-      navigate('/dashboard');
+      navigate('/recordings');
     } catch (err) {
-      const msg = String(err);
-      if (msg.includes('409') || msg.toLowerCase().includes('already')) {
-        setError('An account with this email already exists');
+      const raw = err instanceof Error ? err.message : String(err);
+      const lower = raw.toLowerCase();
+      if (lower.includes('failed to fetch') || lower.includes('networkerror')) {
+        setError('Cannot reach the API server at ' + (import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000') + '. Is the backend running?');
+      } else if (raw.includes('409') || lower.includes('already')) {
+        setError('An account with this email already exists.');
       } else {
-        setError('Signup failed. Please try again.');
+        // Try to pull a clean message out of a FastAPI {"detail":"..."} body.
+        let detail = raw;
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.detail) detail = String(parsed.detail);
+        } catch { /* not JSON */ }
+        setError(detail || 'Signup failed.');
       }
     } finally {
       setLoading(false);

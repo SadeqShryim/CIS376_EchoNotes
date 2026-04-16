@@ -7,8 +7,11 @@ CLAUDE.md
 
 # Team notes
 seraj.md
-
+echonotes-webapp-feature-expansion-prompt.md
 # Test artifacts
 *.wav
 *.png
 reject_test.txt
+
+# Chrome extension — override *.png for shipped icons
+!echonotes-recorder/icons/*.png

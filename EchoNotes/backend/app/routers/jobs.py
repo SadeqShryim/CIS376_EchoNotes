@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.db import supabase
 from app.dependencies import get_current_user, now_iso
-from app.services.transcription import submit_transcription
+from app.services.transcription import fetch_and_finalize_job, submit_transcription
 from app.storage import get_signed_url
 
 router = APIRouter()
@@ -64,4 +64,8 @@ def get_job_status(job_id: str, user_id: str = Depends(get_current_user)):
     if not result.data:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    return result.data[0]
+    # Actively poll AssemblyAI on every status request. In production the
+    # webhook at POST /webhooks/assemblyai usually wins the race and this is a
+    # cheap no-op; in local dev the webhook can't reach localhost, so this is
+    # the path that actually finalises the job.
+    return fetch_and_finalize_job(result.data[0])

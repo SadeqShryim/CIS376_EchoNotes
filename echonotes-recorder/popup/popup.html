@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>EchoNotes Recorder</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="pop-header">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <h1>EchoNotes <span class="brand-suffix">Recorder</span></h1>
+      </div>
+    </header>
+
+    <main id="main">
+      <section id="idle-view" class="view">
+        <p class="hint">Capture tab audio from your current meeting.</p>
+        <button id="start-btn" class="primary">Start Recording</button>
+        <p id="idle-error" class="error" hidden></p>
+      </section>
+
+      <section id="recording-view" class="view" hidden>
+        <div class="rec-indicator">
+          <span class="pulse-dot" id="pulse-dot"></span>
+          <span id="rec-text">Recording</span>
+        </div>
+        <p class="tab-title" title="">on <span id="tab-name">—</span></p>
+        <p class="timer" id="timer">00:00</p>
+        <div class="btn-row">
+          <button id="stop-btn" class="danger">Stop</button>
+        </div>
+        <p class="hint small">Use the red floating panel on the tab for more controls.</p>
+      </section>
+
+      <section id="saved-view" class="view" hidden>
+        <p class="saved-text">Recording saved.</p>
+        <p class="hint small">Download or upload from the panel on the tab, or dismiss below.</p>
+        <button id="dismiss-btn" class="secondary">Dismiss</button>
+        <p id="saved-error" class="error" hidden></p>
+      </section>
+    </main>
+
+    <footer class="pop-footer">
+      <a href="#" id="options-link">Options</a>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

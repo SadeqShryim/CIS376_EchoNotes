@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EchoNotes Recorder — Options</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="wrapper">
+      <header class="page-header">
+        <div class="brand">
+          <span class="brand-dot"></span>
+          <h1>EchoNotes <span class="brand-suffix">Recorder · Options</span></h1>
+        </div>
+      </header>
+
+      <section class="card">
+        <h2>EchoNotes account</h2>
+        <p class="card-hint">
+          Recordings are uploaded through the EchoNotes backend (so they
+          inherit your account's ownership, transcription, and summarization).
+          Use the same email and password you sign in with on the web app.
+        </p>
+
+        <label class="field">
+          <span class="label">API URL</span>
+          <input
+            type="url"
+            id="api-base-url"
+            placeholder="http://127.0.0.1:8000"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <span class="field-hint">
+            Point this at your running EchoNotes backend. For local dev that's
+            usually <code>http://127.0.0.1:8000</code>.
+          </span>
+        </label>
+
+        <label class="field">
+          <span class="label">Email</span>
+          <input
+            type="email"
+            id="account-email"
+            placeholder="you@example.com"
+            autocomplete="username"
+            spellcheck="false"
+          />
+        </label>
+
+        <label class="field">
+          <span class="label">Password</span>
+          <div class="input-wrap">
+            <input
+              type="password"
+              id="account-password"
+              placeholder="Your EchoNotes password"
+              autocomplete="current-password"
+              spellcheck="false"
+            />
+            <button type="button" class="inline-toggle" id="toggle-password">Show</button>
+          </div>
+          <span class="field-hint">
+            Stored in <code>chrome.storage.sync</code> so uploads work without
+            asking on every stop. A fresh access token is fetched just-in-time
+            for each upload and never written to disk.
+          </span>
+        </label>
+
+        <div class="btn-row">
+          <button type="button" class="btn btn-secondary" id="test-btn">Test connection</button>
+          <p id="test-result" class="test-result" hidden></p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Preferences</h2>
+
+        <fieldset class="field-group">
+          <legend class="label">Default save action</legend>
+          <label class="radio">
+            <input type="radio" name="save-action" value="ask" />
+            <span>Always ask (show both options after stopping)</span>
+          </label>
+          <label class="radio">
+            <input type="radio" name="save-action" value="download" />
+            <span>Download .webm</span>
+          </label>
+          <label class="radio">
+            <input type="radio" name="save-action" value="upload" />
+            <span>Upload to EchoNotes</span>
+          </label>
+        </fieldset>
+
+        <label class="field">
+          <span class="label">Audio quality</span>
+          <select id="audio-quality">
+            <option value="standard">Standard — 128 kbps</option>
+            <option value="high">High — 256 kbps</option>
+          </select>
+        </label>
+      </section>
+
+      <div class="save-row">
+        <button type="button" class="btn btn-primary" id="save-btn">Save</button>
+        <p id="save-status" class="save-status" hidden></p>
+      </div>
+    </main>
+
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

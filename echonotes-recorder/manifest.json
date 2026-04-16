@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "EchoNotes Recorder",
+  "version": "1.0.0",
+  "description": "Record meeting audio from any browser tab. Download or upload directly to EchoNotes for transcription and summarization.",
+  "permissions": [
+    "tabCapture",
+    "offscreen",
+    "activeTab",
+    "tabs",
+    "downloads",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "EchoNotes Recorder",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["content/content-script.css"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

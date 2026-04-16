@@ -86,7 +86,7 @@ export default function AudioDetailPage() {
   if (error === 'File not found') {
     return (
       <div className="detail-page">
-        <p>File not found. <button className="btn-ghost" onClick={() => navigate('/dashboard')}>Go back</button></p>
+        <p>File not found. <button className="btn-ghost" onClick={() => navigate('/recordings')}>Go back</button></p>
       </div>
     );
   }
@@ -97,7 +97,7 @@ export default function AudioDetailPage() {
 
   return (
     <div className="detail-page">
-      <button className="btn-ghost back-btn" onClick={() => navigate('/dashboard')}>
+      <button className="btn-ghost back-btn" onClick={() => navigate('/recordings')}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M19 12H5M12 19l-7-7 7-7" />
         </svg>

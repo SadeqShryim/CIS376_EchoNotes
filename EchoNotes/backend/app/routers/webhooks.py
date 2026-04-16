@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.db import supabase
-from app.dependencies import now_iso
-from app.services.transcription import get_transcript, format_transcript
+from app.services.transcription import fetch_and_finalize_job
 
 router = APIRouter()
 
@@ -11,12 +10,11 @@ router = APIRouter()
 async def assemblyai_webhook(request: Request):
     body = await request.json()
     transcript_id = body.get("transcript_id")
-    status = body.get("status")
 
     if not transcript_id:
         raise HTTPException(status_code=400, detail="Missing transcript_id")
 
-    # Find the job by external_job_id
+    # Find the job by external_job_id (AssemblyAI transcript id).
     job_result = (
         supabase.table("transcription_jobs")
         .select("*")
@@ -27,28 +25,7 @@ async def assemblyai_webhook(request: Request):
     if not job_result.data:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    job = job_result.data[0]
-
-    if status == "completed":
-        transcript = get_transcript(transcript_id)
-        transcript_text = format_transcript(transcript)
-
-        supabase.table("audio_files").update({
-            "transcript": transcript_text,
-            "status": "transcribed",
-            "updated_at": now_iso(),
-        }).eq("id", job["audio_file_id"]).execute()
-
-        supabase.table("transcription_jobs").update({
-            "status": "succeeded",
-            "completed_at": now_iso(),
-        }).eq("id", job["id"]).execute()
-
-    elif status == "error":
-        supabase.table("transcription_jobs").update({
-            "status": "failed",
-            "error_message": body.get("error", "Transcription failed"),
-            "completed_at": now_iso(),
-        }).eq("id", job["id"]).execute()
-
+    # Reuse the same finalize path the polling endpoint uses so webhook and
+    # poll can never disagree on the canonical DB state.
+    fetch_and_finalize_job(job_result.data[0])
     return {"ok": True}

@@ -201,3 +201,20 @@ button.secondary:hover {
 .pop-footer a:hover {
   color: #f3f4f6;
 }
+
+.mic-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #d1d5db;
+  cursor: pointer;
+  user-select: none;
+}
+.mic-toggle input {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: #ef4444;
+  cursor: pointer;
+}

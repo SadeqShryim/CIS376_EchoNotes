@@ -86,7 +86,8 @@ $('start-btn').addEventListener('click', async () => {
   btn.disabled = true;
   const orig = btn.textContent;
   btn.textContent = 'Starting…';
-  const resp = await send('START');
+  const withMic = $('include-mic').checked;
+  const resp = await send('START', { withMic });
   btn.disabled = false;
   btn.textContent = orig;
   if (!resp || !resp.ok) {

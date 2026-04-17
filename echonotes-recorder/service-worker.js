@@ -14,6 +14,7 @@ const INITIAL_STATE = Object.freeze({
   pausedMs: 0,
   error: null,
   uploadProgress: null,
+  withMic: false,
 });
 
 let state = { ...INITIAL_STATE };
@@ -109,7 +110,7 @@ async function broadcastState() {
 }
 
 // --- Commands -----------------------------------------------------------
-async function startRecording() {
+async function startRecording({ withMic = false } = {}) {
   if (state.recording) return { ok: true, state };
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -139,6 +140,7 @@ async function startRecording() {
       target: 'offscreen',
       type: 'START',
       streamId,
+      withMic,
     });
   } catch (err) {
     await closeOffscreen();
@@ -155,6 +157,7 @@ async function startRecording() {
     tabId: tab.id,
     tabTitle: tab.title || '(untitled)',
     startTime: Date.now(),
+    withMic,
   };
   await saveState();
   setBadge({ recording: true, paused: false });
@@ -289,7 +292,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           return;
 
         case 'START':
-          sendResponse(await startRecording());
+          sendResponse(await startRecording({ withMic: !!msg.withMic }));
           return;
         case 'STOP':
           sendResponse(await stopRecording());

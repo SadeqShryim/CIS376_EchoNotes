@@ -15,6 +15,7 @@ const els = {
   password: $('account-password'),
   togglePassword: $('toggle-password'),
   quality: $('audio-quality'),
+  includeMic: $('default-include-mic'),
   testBtn: $('test-btn'),
   testResult: $('test-result'),
   saveBtn: $('save-btn'),
@@ -27,6 +28,7 @@ const DEFAULTS = Object.freeze({
   password: '',
   defaultSaveAction: 'ask',
   audioQuality: 'standard',
+  defaultIncludeMic: false,
 });
 
 async function load() {
@@ -43,6 +45,7 @@ async function load() {
   els.email.value = merged.email;
   els.password.value = merged.password;
   els.quality.value = merged.audioQuality;
+  els.includeMic.checked = !!merged.defaultIncludeMic;
   const radio = document.querySelector(`input[name="save-action"][value="${merged.defaultSaveAction}"]`);
   if (radio) radio.checked = true;
   else document.querySelector('input[name="save-action"][value="ask"]').checked = true;
@@ -56,6 +59,7 @@ function readForm() {
     password: els.password.value,
     defaultSaveAction: radio ? radio.value : 'ask',
     audioQuality: els.quality.value || 'standard',
+    defaultIncludeMic: els.includeMic.checked,
   };
 }
 

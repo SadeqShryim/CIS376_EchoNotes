@@ -142,3 +142,13 @@ send('GET_STATE').then((resp) => {
   if (resp && resp.state) renderState(resp.state);
   else renderState({ recording: false, paused: false, saved: false });
 });
+
+// Initialize mic checkbox from user's saved default. Per-recording overrides
+// are intentionally not persisted — the default wins on each popup open.
+(async () => {
+  try {
+    if (!globalThis.chrome || !chrome.storage || !chrome.storage.sync) return;
+    const { defaultIncludeMic } = await chrome.storage.sync.get('defaultIncludeMic');
+    if (defaultIncludeMic) $('include-mic').checked = true;
+  } catch {}
+})();

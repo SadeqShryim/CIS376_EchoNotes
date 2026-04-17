@@ -13,5 +13,11 @@ echonotes-webapp-feature-expansion-prompt.md
 *.png
 reject_test.txt
 
-# Chrome extension — override *.png for shipped icons
+# Secrets (nested .gitignore files also cover these; this is a safety net)
+.env
+**/.env
+!.env.example
+!**/.env.example
+
+# Chrome extension: override *.png for shipped icons
 !echonotes-recorder/icons/*.png

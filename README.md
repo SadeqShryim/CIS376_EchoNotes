@@ -1,130 +1,199 @@
 # EchoNotes
 
-Audio note-taking app with upload, transcription, and summarization. Built with React + FastAPI + Supabase.
+EchoNotes is an audio note-taking web app for meeting review. Upload a recording and the app returns a speaker-labeled transcript from AssemblyAI and an AI-generated summary from Anthropic Claude. Email / password accounts are handled through Supabase Auth.
+
+## Live Demo
+
+https://cis-376-project.vercel.app
+
+You will need to create an account on the live site to try it end to end.
 
 ## Tech Stack
 
-- **Frontend:** React 19, TypeScript, Vite
-- **Backend:** Python, FastAPI, Uvicorn
-- **Database:** Supabase (PostgreSQL)
-- **Storage:** Local disk (`backend/uploads/`) with session-authenticated access
+- React 19, TypeScript, Vite (frontend)
+- Python 3.11+, FastAPI, Uvicorn (backend)
+- Supabase: authentication, PostgreSQL, and object storage
+- AssemblyAI: speech-to-text with speaker diarization
+- Anthropic Claude: structured meeting summaries
+- Hosted on Vercel (frontend) and Render (backend)
 
-## Current Status (MVP)
+## Prerequisites
 
-- Audio upload, list, playback, and delete
-- Session-based ownership isolation (pre-auth)
-- Transcription job pipeline (simulated — real speech-to-text coming)
-- Data persisted to Supabase PostgreSQL
-- File-type validation (audio only)
-- Authenticated media endpoint
+- Node.js 20 or newer
+- Python 3.11 or newer
+- Git
+- A Supabase account (free tier is sufficient)
+- An AssemblyAI API key (free trial credit is sufficient for testing)
+- An Anthropic API key (prepaid or free credit)
 
-## Setup
+## Local Setup
 
-### 1. Clone
+The repository root is `CIS376_EchoNotes/`. The application code lives in the `EchoNotes/` subfolder. The Chrome extension at `echonotes-recorder/` is optional and not required for grading.
+
+### 1. Clone the repository
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/SadeqShryim/CIS376_EchoNotes.git
 cd CIS376_EchoNotes
 ```
 
-### 2. Backend
+### 2. Create a Supabase project
 
-**Mac / Linux:**
+1. Sign in to https://supabase.com and create a new project.
+2. Wait a couple of minutes for the database to finish provisioning.
+
+### 3. Run the database schema
+
+1. Open the Supabase dashboard for your project.
+2. Go to the SQL Editor and click New Query.
+3. Paste the full contents of `schema.sql` (at the root of this repo) into the editor and click Run.
+
+This creates the `audio_files` and `transcription_jobs` tables and the row-level security policy that scopes reads to the owning user.
+
+### 4. Create the Storage bucket
+
+1. In the Supabase dashboard, open Storage.
+2. Create a new bucket named exactly `audio-uploads`.
+3. Mark the bucket Public.
+4. Keep the default file size limit (50 MB). Leave MIME type restrictions empty.
+
+The bucket must be public for the current playback flow to work (the backend issues time-limited signed URLs for reads).
+
+### 5. Collect API keys
+
+- Supabase: Project Settings > API. Copy the Project URL, the `anon public` key, and the `service_role` key.
+- AssemblyAI: sign in at https://www.assemblyai.com/ and copy the API key from the dashboard.
+- Anthropic: sign in at https://console.anthropic.com/ and create an API key.
+
+### 6. Backend setup
+
+Open a terminal at the repo root.
+
 ```bash
 cd EchoNotes/backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-**Windows (PowerShell):**
-```powershell
-cd EchoNotes\backend
 python -m venv .venv
-.venv\Scripts\Activate.ps1
+source .venv/bin/activate          # macOS / Linux / Git Bash on Windows
+# .venv\Scripts\Activate.ps1       # Windows PowerShell
 pip install -r requirements.txt
+cp .env.example .env
 ```
 
-**Windows (Git Bash):**
-```bash
-cd EchoNotes/backend
-python -m venv .venv
-source .venv/Scripts/activate
-pip install -r requirements.txt
-```
+Open `EchoNotes/backend/.env` and fill in every value. Then start the server:
 
-Create `EchoNotes/backend/.env`:
-```
-SUPABASE_URL=<your-supabase-project-url>
-SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
-```
-
-Start the server:
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-Backend runs on `http://127.0.0.1:8000` — Swagger docs at `/docs`.
+The backend runs at http://127.0.0.1:8000. Auto-generated API docs: http://127.0.0.1:8000/docs.
 
-### 3. Frontend
+### 7. Frontend setup
+
+Open a second terminal at the repo root.
 
 ```bash
 cd EchoNotes/frontend
 npm install
+cp .env.example .env
 ```
 
-Create `EchoNotes/frontend/.env`:
-```
-VITE_SUPABASE_URL=<your-supabase-project-url>
-VITE_SUPABASE_ANON_KEY=<your-supabase-anon-key>
-VITE_API_BASE=http://127.0.0.1:8000
-```
+Open `EchoNotes/frontend/.env` and fill in every value. Keep `VITE_API_BASE=http://127.0.0.1:8000` for local development. Then start the dev server:
 
-Start the dev server:
 ```bash
 npm run dev
 ```
 
-Frontend runs on `http://localhost:5173`.
+The app loads at http://localhost:5173. Create an account, upload an audio file, then use the Transcribe and Summarize buttons.
+
+### 8. (Optional) Run the backend tests
+
+```bash
+cd EchoNotes/backend
+python -m pytest tests/ -v
+```
+
+## Production Deployment
+
+The live deployment at https://cis-376-project.vercel.app is set up as follows.
+
+### Frontend (Vercel)
+
+1. Import the repository in the Vercel dashboard.
+2. Set Root Directory to `EchoNotes/frontend`.
+3. Framework preset: Vite (detected automatically).
+4. Add these environment variables in the Vercel dashboard:
+   - `VITE_API_BASE`: the Render backend URL (for example `https://echonotes-backend.onrender.com`)
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+5. Deploy.
+
+### Backend (Render)
+
+1. Create a new Web Service on Render and connect the repository.
+2. Root Directory: `EchoNotes/backend`
+3. Build Command: `pip install -r requirements.txt`
+4. Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+5. Environment variables:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `ASSEMBLYAI_API_KEY`
+   - `ANTHROPIC_API_KEY`
+6. Make sure the deployed Vercel origin is included in the CORS allow list in `EchoNotes/backend/app/main.py`.
+
+### Keeping the backend warm
+
+The Render free tier spins the container down after 15 minutes of inactivity, which causes a 10 to 30 second cold start on the next request. This deployment uses a free cron-job.org job that calls `GET /health` on the Render backend every 10 minutes to keep the container warm. A grader reproducing the deployment has two options:
+
+- Set up a similar keepalive ping (cron-job.org, UptimeRobot, or any scheduler).
+- Upgrade the Render service to the Starter plan (currently $7 / month) to avoid sleep entirely.
+
+## Project Structure
+
+```
+CIS376_EchoNotes/
+  README.md
+  schema.sql                   # Supabase database schema (run once)
+  EchoNotes/
+    backend/                   # FastAPI backend (deployed on Render)
+      app/
+        main.py                # FastAPI entry point
+        db.py                  # Supabase client
+        dependencies.py        # JWT auth dependency
+        storage.py             # Supabase Storage helpers
+        routers/               # auth, audio, jobs, summary, webhooks
+        services/              # AssemblyAI and Anthropic integrations
+      tests/                   # pytest suite
+      migrations/              # one-off SQL migrations applied during development
+      requirements.txt
+      .env.example
+    frontend/                  # React 19 + Vite (deployed on Vercel)
+      src/
+        pages/                 # Login, Signup, Upload, Recordings, Notes, AudioDetail
+        components/            # Layout, cards, viewers
+        lib/                   # API client, auth, Supabase Realtime client
+      package.json
+      package-lock.json
+      vercel.json
+      .env.example
+  echonotes-recorder/          # Optional Chrome MV3 extension for tab recording
+```
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| POST | `/session/init` | Create or reuse session |
-| GET | `/session/me` | Get current session ID |
-| POST | `/audio/upload` | Upload audio file (audio MIME types only) |
-| GET | `/audio` | List session-scoped audio files |
-| DELETE | `/audio/{id}` | Delete audio file (ownership enforced) |
-| GET | `/media/{file_path}` | Stream audio file (session-authenticated) |
-| POST | `/jobs/transcribe/{audio_file_id}` | Create transcription job |
-| GET | `/jobs/{job_id}/status` | Poll transcription job status |
+All protected endpoints expect `Authorization: Bearer <access_token>` using the token returned by `POST /auth/login`.
 
-All protected endpoints require an `X-Session-Token` header. The `/media` endpoint accepts a `token` query parameter (for `<audio>` element compatibility).
-
-## Pre-auth Session Ownership (MVP)
-
-- Frontend creates a stable browser token stored in localStorage
-- Token sent as `X-Session-Token` on every API request
-- Backend resolves token to a session ID
-- All records stamped with `owner_type` / `owner_id`
-- Read, delete, and media access filtered by ownership
-
-**Known MVP limitations:**
-- Sessions are in-memory (reset on backend restart, but audio data persists in Supabase)
-- Transcription produces simulated output (real speech-to-text not yet integrated)
-
-## Branching & PR Rules
-
-- One issue = one branch = one PR
-- Branch naming: `feat/<issue-number>-short-title`
-- Keep PRs small and reviewable
-- Ensure app runs locally before opening a PR
-- Never commit `.venv`, `node_modules`, `.env`, or cache files
-
-## Testing
-
-- Backend tests: `cd EchoNotes/backend && python -m pytest tests/ -v`
-- Frontend lint: `cd EchoNotes/frontend && npm run lint`
-- Frontend build check: `cd EchoNotes/frontend && npm run build`
+| Method | Path                              | Auth        | Description                                            |
+|--------|-----------------------------------|-------------|--------------------------------------------------------|
+| GET    | `/health`                         | none        | Liveness probe (also used by the keepalive job)        |
+| POST   | `/auth/signup`                    | none        | Create an account, returns an access token             |
+| POST   | `/auth/login`                     | none        | Email / password login, returns an access token        |
+| POST   | `/auth/logout`                    | Bearer      | Log the current user out                               |
+| GET    | `/auth/me`                        | Bearer      | Return the current user id                             |
+| POST   | `/audio/upload`                   | Bearer      | Upload an audio file (multipart)                       |
+| GET    | `/audio`                          | Bearer      | List the caller's recordings                           |
+| DELETE | `/audio/{id}`                     | Bearer      | Delete a recording                                     |
+| GET    | `/media/{file_path}?token=<jwt>`  | query token | Return a signed URL for playback                       |
+| POST   | `/jobs/transcribe/{audio_file_id}`| Bearer      | Submit a recording to AssemblyAI                       |
+| GET    | `/jobs/{job_id}/status`           | Bearer      | Poll a transcription job (auto-finalises on completion)|
+| POST   | `/audio/{id}/summarize`           | Bearer      | Generate a Claude summary from the stored transcript   |
+| GET    | `/audio/{id}/summary`             | Bearer      | Return the stored summary                              |
+| POST   | `/webhooks/assemblyai`            | none        | AssemblyAI completion callback                         |

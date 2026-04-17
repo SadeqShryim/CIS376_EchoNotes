@@ -15,6 +15,7 @@ const INITIAL_STATE = Object.freeze({
   error: null,
   uploadProgress: null,
   withMic: false,
+  micActive: false,
 });
 
 let state = { ...INITIAL_STATE };
@@ -158,6 +159,7 @@ async function startRecording({ withMic = false } = {}) {
     tabTitle: tab.title || '(untitled)',
     startTime: Date.now(),
     withMic,
+    micActive: !!offscreenResp.micActive,
   };
   await saveState();
   setBadge({ recording: true, paused: false });
@@ -167,7 +169,7 @@ async function startRecording({ withMic = false } = {}) {
   setTimeout(() => { broadcastState(); }, 150);
   broadcastState();
 
-  return { ok: true, state };
+  return { ok: true, state, micWarning: offscreenResp.micWarning || null };
 }
 
 async function stopRecording() {

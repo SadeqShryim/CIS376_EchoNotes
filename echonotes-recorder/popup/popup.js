@@ -96,6 +96,16 @@ $('start-btn').addEventListener('click', async () => {
     return;
   }
   if (resp.state) renderState(resp.state);
+  if (resp.micWarning) {
+    // Recording started, but mic was requested and unavailable. Show the
+    // warning in the recording view briefly so the user knows.
+    const warn = document.createElement('p');
+    warn.className = 'hint small';
+    warn.style.color = '#F59E0B';
+    warn.textContent = resp.micWarning;
+    $('recording-view').appendChild(warn);
+    setTimeout(() => warn.remove(), 6000);
+  }
 });
 
 $('stop-btn').addEventListener('click', async () => {

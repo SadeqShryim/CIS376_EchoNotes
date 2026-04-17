@@ -3,10 +3,13 @@
 // AudioContext analysis, the recorded Blob, download, and Supabase upload.
 
 let mediaRecorder = null;
-let mediaStream = null;
+let mediaStream = null;        // tab capture stream
+let micStream = null;          // optional microphone stream
 let audioContext = null;
 let analyser = null;
-let sourceNode = null;
+let sourceNode = null;         // tab -> destination + mixed destination
+let micSourceNode = null;      // mic -> mixed destination only (no playback to avoid echo)
+let mixedDestination = null;   // MediaStreamAudioDestinationNode the recorder + analyser consume
 let chunks = [];
 let recordingStartMs = 0;
 let pausedMs = 0;
@@ -28,7 +31,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 async function handle(msg) {
   switch (msg.type) {
-    case 'START':    return startCapture(msg.streamId);
+    case 'START':    return startCapture(msg.streamId, !!msg.withMic);
     case 'PAUSE':    return pause();
     case 'RESUME':   return resume();
     case 'STOP':     return stop();
@@ -45,10 +48,11 @@ async function handle(msg) {
 }
 
 // --- Start --------------------------------------------------------------
-async function startCapture(streamId) {
+async function startCapture(streamId, withMic) {
   if (mediaRecorder) return { ok: false, error: 'Already recording.' };
   if (!streamId) return { ok: false, error: 'Missing streamId.' };
 
+  // 1. Acquire tab audio (always required).
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -63,26 +67,57 @@ async function startCapture(streamId) {
     return { ok: false, error: `getUserMedia failed: ${err.message}` };
   }
 
-  // Route tab audio back to the speakers so the user still hears the meeting.
+  // 2. Optionally acquire microphone audio. Failure here is non-fatal — fall
+  //    back to tab-only and report the reason so the popup can show a notice.
+  let micWarning = null;
+  if (withMic) {
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
+    } catch (err) {
+      micStream = null;
+      micWarning = `Microphone unavailable (${err.name || 'error'}). Recording tab audio only.`;
+    }
+  }
+
+  // 3. Build the audio graph.
   audioContext = new AudioContext();
   sourceNode = audioContext.createMediaStreamSource(mediaStream);
+  // Tab audio -> speakers, so the user still hears the meeting.
   sourceNode.connect(audioContext.destination);
 
-  // Analyser tap for waveform + RMS.
+  // Recorder consumes the mixed destination. We always go through it so the
+  // recording path is uniform whether mic is on or off.
+  mixedDestination = audioContext.createMediaStreamDestination();
+  sourceNode.connect(mixedDestination);
+
+  if (micStream) {
+    micSourceNode = audioContext.createMediaStreamSource(micStream);
+    // Mic -> mixed destination ONLY. Do NOT connect to audioContext.destination
+    // or the user will hear themselves echoed and feedback-loop the meeting.
+    micSourceNode.connect(mixedDestination);
+  }
+
+  // Analyser taps the mixed stream so the waveform reflects what's actually
+  // being recorded (tab + mic together when mic is on).
   analyser = audioContext.createAnalyser();
   analyser.fftSize = 1024;
   analyser.smoothingTimeConstant = 0.55;
-  sourceNode.connect(analyser);
+  const analyserSource = audioContext.createMediaStreamSource(mixedDestination.stream);
+  analyserSource.connect(analyser);
 
-  // Read quality preference.
+  // 4. Read quality preference.
   let bitrate = 128000;
   try {
     const { audioQuality } = await chrome.storage.sync.get('audioQuality');
     if (audioQuality === 'high') bitrate = 256000;
   } catch {}
 
+  // 5. Build MediaRecorder on the mixed stream.
   try {
-    mediaRecorder = new MediaRecorder(mediaStream, {
+    mediaRecorder = new MediaRecorder(mixedDestination.stream, {
       mimeType: 'audio/webm;codecs=opus',
       audioBitsPerSecond: bitrate,
     });
@@ -108,7 +143,7 @@ async function startCapture(streamId) {
   pausedMs = 0;
   pauseStartMs = 0;
   startWaveform();
-  return { ok: true };
+  return { ok: true, micActive: !!micStream, micWarning };
 }
 
 // --- Waveform streaming -------------------------------------------------
@@ -210,13 +245,21 @@ function cleanupAudio() {
   if (mediaStream) {
     try { mediaStream.getTracks().forEach((t) => t.stop()); } catch {}
   }
-  if (sourceNode) { try { sourceNode.disconnect(); } catch {} }
-  if (analyser)   { try { analyser.disconnect(); }   catch {} }
+  if (micStream) {
+    try { micStream.getTracks().forEach((t) => t.stop()); } catch {}
+  }
+  if (sourceNode)       { try { sourceNode.disconnect(); }       catch {} }
+  if (micSourceNode)    { try { micSourceNode.disconnect(); }    catch {} }
+  if (mixedDestination) { try { mixedDestination.disconnect(); } catch {} }
+  if (analyser)         { try { analyser.disconnect(); }         catch {} }
   if (audioContext && audioContext.state !== 'closed') {
     try { audioContext.close(); } catch {}
   }
   mediaStream = null;
+  micStream = null;
   sourceNode = null;
+  micSourceNode = null;
+  mixedDestination = null;
   analyser = null;
   audioContext = null;
 }
